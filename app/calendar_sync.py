@@ -1,6 +1,3 @@
-import os
-import sys
-import json
 from pathlib import Path
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -14,11 +11,9 @@ SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 TOKEN_DIR = Path.home() / ".concert_diary_app"
 TOKEN_PATH = TOKEN_DIR / "token.json"
 
-# ── Embed OAuth client secrets directly ──────────────────────────────
-# This avoids requiring the user to download a separate client_secrets.json.
-# These credentials are for a Desktop OAuth 2.0 Client created in Google Cloud Console.
-# You can replace these with your own Client ID / Secret from:
-#   https://console.cloud.google.com/apis/credentials
+# ── Embedded OAuth client credentials ────────────────────────────
+# This enables seamless Google authentication via browser.
+# The user only needs to log in to their Google account once.
 _CLIENT_CONFIG = {
     "installed": {
         "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
