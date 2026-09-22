@@ -1,1 +1,26 @@
+# Environment variables (keeps credentials out of source code)
+# Each developer/user copies .env.template → .env and fills in their own values
+.env
+
+# Python cache
 __pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+.venv/
+venv/
+
+# PyInstaller build artifacts
+dist/
+build/
+*.spec
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

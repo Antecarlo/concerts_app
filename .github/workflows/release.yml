@@ -23,9 +23,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Create .env file with credentials
+        run: |
+          echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" > .env
+          echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" >> .env
+        shell: bash
+
       - name: Build executable with PyInstaller
         run: |
-          pyinstaller --noconsole --onefile --name "MyConcertDiary" main.py
+          pyinstaller --noconsole --onefile --add-data ".env;." --name "MyConcertDiary" main.py
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
