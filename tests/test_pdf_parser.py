@@ -12,14 +12,12 @@ from app.pdf_parser import (
     _infer_year_and_month,
     _parse_date,
     _extract_venue_and_event,
+    _add_hours,
     parse_pdf,
     MONTHS_ES,
     DAYS_ES,
     ROW_PATTERN,
 )
-
-
-# ── Fixtures ─────────────────────────────────────────────────────────
 
 @pytest.fixture
 def temp_pdf_realistic(tmp_path):
@@ -61,7 +59,6 @@ def temp_pdf_realistic(tmp_path):
     c.save()
     return str(filepath)
 
-
 @pytest.fixture
 def temp_pdf_simple(tmp_path):
     """Simple PDF with fewer rows for quick testing."""
@@ -77,9 +74,6 @@ def temp_pdf_simple(tmp_path):
     c.drawString(50, 710, "Martes 9 Ningun evento aqui")
     c.save()
     return str(filepath)
-
-
-# ── Unit tests: _infer_year_and_month ──────────────────────────────
 
 class TestInferYearAndMonth:
     def test_header_septiembre(self):
@@ -117,9 +111,6 @@ class TestInferYearAndMonth:
         assert year is None
         assert month is None
 
-
-# ── Unit tests: _parse_date ────────────────────────────────────────
-
 class TestParseDate:
     def test_normal(self):
         assert _parse_date(4, 9, 2026) == "2026-09-04"
@@ -136,8 +127,18 @@ class TestParseDate:
     def test_padding_month(self):
         assert _parse_date(15, 3, 2020) == "2020-03-15"
 
+class TestAddHours:
+    def test_add_two_hours(self):
+        assert _add_hours("20:30", 2) == "22:30"
 
-# ── Unit tests: _extract_venue_and_event ───────────────────────────
+    def test_wrap_midnight(self):
+        assert _add_hours("23:00", 2) == "01:00"
+
+    def test_empty_string(self):
+        assert _add_hours("", 2) == ""
+
+    def test_invalid_string(self):
+        assert _add_hours("abc", 2) == ""
 
 class TestExtractVenueAndEvent:
     def test_comma_split_venue(self):
@@ -187,9 +188,6 @@ class TestExtractVenueAndEvent:
         event, venue = _extract_venue_and_event("Festival, Sala Mozart")
         assert "Sala Mozart" in venue
 
-
-# ── Unit tests: ROW_PATTERN regex ──────────────────────────────────
-
 class TestRowPattern:
     def test_standard_row(self):
         m = ROW_PATTERN.search("Viernes 4 Concierto, Plaza Mayor 20:30 H")
@@ -224,9 +222,6 @@ class TestRowPattern:
         assert m.group("description").strip() == "Concierto, (Lugar por confirmar)"
         assert m.group("time") == "20:30"
 
-
-# ── Integration tests: parse_pdf with realistic temp PDF ────────────
-
 class TestParsePdfRealistic:
     """Tests that parse the full 9-concert realistic PDF fixture."""
 
@@ -235,6 +230,8 @@ class TestParsePdfRealistic:
         assert len(results) > 0
         for concert in results:
             assert "date" in concert
+            assert "start_time" in concert
+            assert "end_time" in concert
             assert "location" in concert
             assert "notes" in concert
             assert "source_file" in concert
@@ -292,8 +289,22 @@ class TestParsePdfRealistic:
         for concert in results:
             assert ":" in concert["notes"]
 
+    def test_start_time_extracted(self, temp_pdf_realistic):
+        results = parse_pdf(temp_pdf_realistic)
+        for concert in results:
+            assert concert["start_time"] != ""
+            assert ":" in concert["start_time"]
 
-# ── Integration tests: parse_pdf with simple temp PDF ──────────────
+    def test_end_time_default_plus_two(self, temp_pdf_realistic):
+        results = parse_pdf(temp_pdf_realistic)
+        for concert in results:
+            assert concert["end_time"] != ""
+            h1, m1 = map(int, concert["start_time"].split(":"))
+            h2, m2 = map(int, concert["end_time"].split(":"))
+            total1 = h1 * 60 + m1
+            total2 = h2 * 60 + m2
+            diff = (total2 - total1) % (24 * 60)
+            assert diff == 120, f"Expected +2h, got {diff} min for {concert['start_time']} -> {concert['end_time']}"
 
 class TestParsePdfSimple:
     def test_returns_expected(self, temp_pdf_simple):
@@ -305,12 +316,15 @@ class TestParsePdfSimple:
         first = results[0]
         assert first["date"] == "2026-09-04"
         assert "Plaza Mayor" in first["location"]
+        assert first["start_time"] == "20:30"
+        assert first["end_time"] == "22:30"
 
     def test_event_name(self, temp_pdf_simple):
         results = parse_pdf(temp_pdf_simple)
         concert = [c for c in results if "Teatro Central" in c["location"]]
         assert len(concert) >= 1
         assert "Concierto Especial" in concert[0]["notes"]
+        assert concert[0]["start_time"] == "12:00"
 
     def test_source_file(self, temp_pdf_simple):
         results = parse_pdf(temp_pdf_simple)
@@ -321,9 +335,6 @@ class TestParsePdfSimple:
         results = parse_pdf(temp_pdf_simple)
         for r in results:
             assert r["date"] != ""
-
-
-# ── Edge cases for parse_pdf ───────────────────────────────────────
 
 class TestParsePdfEdgeCases:
     def test_nonexistent_file(self):
@@ -340,6 +351,8 @@ class TestParsePdfEdgeCases:
         results = parse_pdf(str(filepath))
         assert len(results) == 1
         assert results[0]["date"] == ""
+        assert results[0]["start_time"] == ""
+        assert results[0]["end_time"] == ""
         assert results[0]["location"] == ""
         assert results[0]["source_file"] == str(filepath)
 

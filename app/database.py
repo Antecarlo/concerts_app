@@ -14,10 +14,13 @@ def init_db():
         CREATE TABLE IF NOT EXISTS concerts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL,
+            start_time TEXT,
+            end_time TEXT,
             location TEXT NOT NULL,
             notes TEXT,
             calendar_event_id TEXT,
             source_file TEXT,
+            calendar_color TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -28,17 +31,24 @@ def init_db():
         cursor.execute("ALTER TABLE concerts ADD COLUMN calendar_event_id TEXT")
     if "source_file" not in columns:
         cursor.execute("ALTER TABLE concerts ADD COLUMN source_file TEXT")
+    if "start_time" not in columns:
+        cursor.execute("ALTER TABLE concerts ADD COLUMN start_time TEXT")
+    if "end_time" not in columns:
+        cursor.execute("ALTER TABLE concerts ADD COLUMN end_time TEXT")
+    if "calendar_color" not in columns:
+        cursor.execute("ALTER TABLE concerts ADD COLUMN calendar_color TEXT")
     conn.commit()
     conn.close()
 
 
-def add_concert(date: str, location: str, notes: str = "", source_file: str = ""):
+def add_concert(date: str, location: str, notes: str = "", source_file: str = "",
+                start_time: str = "", end_time: str = "", calendar_color: str = ""):
     """Adds a new concert to the database."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO concerts (date, location, notes, source_file) VALUES (?, ?, ?, ?)",
-        (date, location, notes, source_file)
+        "INSERT INTO concerts (date, start_time, end_time, location, notes, source_file, calendar_color) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (date, start_time, end_time, location, notes, source_file, calendar_color)
     )
     conn.commit()
     concert_id = cursor.lastrowid
@@ -46,13 +56,26 @@ def add_concert(date: str, location: str, notes: str = "", source_file: str = ""
     return concert_id
 
 
-def update_concert(concert_id: int, date: str, location: str, notes: str):
+def update_concert(concert_id: int, date: str, location: str, notes: str,
+                   start_time: str = "", end_time: str = "", calendar_color: str = ""):
     """Updates an existing concert."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE concerts SET date = ?, location = ?, notes = ? WHERE id = ?",
-        (date, location, notes, concert_id)
+        "UPDATE concerts SET date = ?, start_time = ?, end_time = ?, location = ?, notes = ?, calendar_color = ? WHERE id = ?",
+        (date, start_time, end_time, location, notes, calendar_color, concert_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_concert_color(concert_id: int, calendar_color: str):
+    """Updates only the calendar color for a concert."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE concerts SET calendar_color = ? WHERE id = ?",
+        (calendar_color, concert_id)
     )
     conn.commit()
     conn.close()
@@ -75,7 +98,8 @@ def get_concerts():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT id, date, location, notes, calendar_event_id, source_file
+        SELECT id, date, location, notes, calendar_event_id, source_file,
+               start_time, end_time, calendar_color
         FROM concerts ORDER BY date DESC
     """)
     concerts = cursor.fetchall()
@@ -88,7 +112,8 @@ def get_concerts_without_calendar_event():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT id, date, location, notes, source_file
+        SELECT id, date, location, notes, source_file,
+               start_time, end_time, calendar_color
         FROM concerts WHERE calendar_event_id IS NULL OR calendar_event_id = ''
         ORDER BY date DESC
     """)
