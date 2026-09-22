@@ -66,16 +66,17 @@ class ConcertDiaryApp(ctk.CTk):
     def _create_widgets(self):
         main_frame = ctk.CTkFrame(self, corner_radius=0)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        main_frame.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(
             main_frame,
             text="My Concert Diary",
             font=ctk.CTkFont(size=24, weight="bold")
-        ).pack(pady=(0, 20))
+        ).grid(row=0, column=0, pady=(0, 20), sticky="ew")
 
         # ── Import frame ──
         import_frame = ctk.CTkFrame(main_frame)
-        import_frame.pack(fill="x", pady=(0, 15))
+        import_frame.grid(row=1, column=0, pady=(0, 15), sticky="ew")
 
         ctk.CTkLabel(
             import_frame,
@@ -119,7 +120,8 @@ class ConcertDiaryApp(ctk.CTk):
 
         # ── Review frame ──
         review_frame = ctk.CTkFrame(main_frame)
-        review_frame.pack(fill="both", expand=True, pady=(0, 15))
+        review_frame.grid(row=2, column=0, pady=(0, 15), sticky="nsew")
+        main_frame.grid_rowconfigure(2, weight=1)
 
         review_header = ctk.CTkFrame(review_frame, fg_color="transparent")
         review_header.pack(fill="x", padx=15, pady=(15, 5))
@@ -136,12 +138,12 @@ class ConcertDiaryApp(ctk.CTk):
         self.review_count.pack(side="left", padx=10)
 
         self.review_scroll = ctk.CTkScrollableFrame(review_frame, height=160)
-        self.review_scroll.pack(fill="both", expand=False, padx=15, pady=(0, 15))
+        self.review_scroll.pack(fill="both", expand=True, padx=15, pady=(0, 15))
         self._build_review_header()
 
         # ── Saved frame ──
         saved_frame = ctk.CTkFrame(main_frame)
-        saved_frame.pack(fill="both", expand=True)
+        saved_frame.grid(row=3, column=0, sticky="ew")
 
         saved_header = ctk.CTkFrame(saved_frame, fg_color="transparent")
         saved_header.pack(fill="x", padx=15, pady=(15, 5))
@@ -176,7 +178,7 @@ class ConcertDiaryApp(ctk.CTk):
             main_frame, text="Ready", anchor="w",
             font=ctk.CTkFont(size=11), text_color=("gray50", "gray50")
         )
-        self.status.pack(fill="x", padx=15, pady=(5, 0))
+        self.status.grid(row=4, column=0, pady=(5, 0), sticky="ew")
 
     def _build_review_header(self):
         for w in self.review_scroll.winfo_children():
