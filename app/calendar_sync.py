@@ -215,6 +215,62 @@ def update_calendar_event(event_id: str, date: str, location: str, notes: str,
         _handle_http_error(e)
 
 
+def upsert_calendar_event(event_id: str, date: str, location: str, notes: str,
+                          start_time: str = "", end_time: str = "",
+                          color_id: str = "") -> str:
+    """
+    Update an existing Google Calendar event, or create a new one
+    if it has been deleted from Google Calendar.
+    Returns the (possibly new) event ID.
+    """
+    creds = get_credentials()
+    service = build("calendar", "v3", credentials=creds)
+
+    if start_time and end_time:
+        start_body = {"dateTime": _make_datetime_iso(date, start_time)}
+        end_body = {"dateTime": _make_datetime_iso(date, end_time)}
+    else:
+        start_body = {"date": date}
+        end_body = {"date": date}
+
+    event = {
+        "summary": f"Concert at {location}" if location else "Concert",
+        "location": location,
+        "description": notes,
+        "start": start_body,
+        "end": end_body,
+    }
+    if color_id:
+        event["colorId"] = color_id
+
+    if event_id:
+        try:
+            result = service.events().update(
+                calendarId="primary", eventId=event_id, body=event
+            ).execute()
+            return result["id"]
+        except HttpError as e:
+            if e.resp.status == 404:
+                pass  # fall through to create a new event
+            else:
+                _handle_http_error(e)
+
+    # Create new event (includes reminders)
+    event["reminders"] = {
+        "useDefault": False,
+        "overrides": [
+            {"method": "popup", "minutes": 24 * 60},
+            {"method": "popup", "minutes": 60},
+        ],
+    }
+
+    try:
+        result = service.events().insert(calendarId="primary", body=event).execute()
+    except HttpError as e:
+        _handle_http_error(e)
+    return result["id"]
+
+
 def delete_calendar_event(event_id: str):
     """Deletes a Google Calendar event."""
     creds = get_credentials()
