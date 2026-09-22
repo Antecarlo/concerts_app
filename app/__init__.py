@@ -1,0 +1,1 @@
+# My Concert Diary - Package initialization
