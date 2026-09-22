@@ -11,19 +11,71 @@ SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 TOKEN_DIR = Path.home() / ".concert_diary_app"
 TOKEN_PATH = TOKEN_DIR / "token.json"
 
-# ── Embedded OAuth client credentials ────────────────────────────
-# This enables seamless Google authentication via browser.
-# The user only needs to log in to their Google account once.
-_CLIENT_CONFIG = {
-    "installed": {
-        "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
-        "client_secret": "YOUR_CLIENT_SECRET",
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        "redirect_uris": ["http://localhost"]
+
+def _load_client_config() -> dict:
+    """
+    Loads OAuth client credentials from, in order of priority:
+    1. .env file in the app directory or executable directory
+    2. Environment variables: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+    3. Compiled-in defaults (used only if nothing else is set)
+
+    This allows each user/developer to use their own Google Cloud project
+    without modifying the source code.
+    """
+    client_id = None
+    client_secret = None
+
+    # 1. Try to load from .env file
+    env_paths = [
+        Path(__file__).parent.parent / ".env",         # project root (development)
+        Path(__file__).parent / ".env",                # app directory
+        Path.home() / ".concert_diary_app" / ".env",   # user config directory
+    ]
+    # Also check if running frozen (PyInstaller)
+    import sys
+    if getattr(sys, "frozen", False):
+        env_paths.insert(0, Path(sys.executable).parent / ".env")
+
+    for env_path in env_paths:
+        if env_path.exists():
+            with open(env_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" in line:
+                        key, val = line.split("=", 1)
+                        key = key.strip()
+                        val = val.strip().strip("\"'")
+                        if key == "GOOGLE_CLIENT_ID":
+                            client_id = val
+                        elif key == "GOOGLE_CLIENT_SECRET":
+                            client_secret = val
+
+    # 2. Fallback to environment variables
+    if not client_id:
+        import os
+        client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    if not client_secret:
+        import os
+        client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+
+    # 3. Last resort: compiled-in defaults
+    if not client_id:
+        client_id = "648692389008-p7f9fef7s0g03g9bbpp4dgo602hu5lis.apps.googleusercontent.com"
+    if not client_secret:
+        client_secret = "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"
+
+    return {
+        "installed": {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "redirect_uris": ["http://localhost"],
+        }
     }
-}
 
 
 def get_credentials() -> Credentials:
@@ -38,10 +90,8 @@ def get_credentials() -> Credentials:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            # Use embedded client configuration — no file needed
-            flow = InstalledAppFlow.from_client_config(
-                _CLIENT_CONFIG, SCOPES
-            )
+            config = _load_client_config()
+            flow = InstalledAppFlow.from_client_config(config, SCOPES)
             # Opens browser on localhost:8080
             creds = flow.run_local_server(port=8080, open_browser=True)
 

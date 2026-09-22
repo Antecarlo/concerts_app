@@ -16,21 +16,38 @@ Import concerts from PDF files, review, save locally, and sync to Google Calenda
 ## For developers
 
 ```bash
+# Install dependencies
 pip install -r requirements.txt
+
+# (Optional) Use your own Google Cloud credentials
+cp .env.template .env
+# Edit .env with your Client ID and Secret
+
+# Run
 python main.py
 ```
 
-### Build executable
-
-```bash
-pyinstaller --noconsole --onefile --name "MyConcertDiary" main.py
-```
-
-### Google OAuth setup (for your own Client ID)
-
-The app ships with embedded OAuth credentials. If you want to use your own:
+### Setting up your own Google OAuth credentials
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services** → **Credentials**
 2. Create **OAuth client ID** → **Desktop app**
-3. Replace the `_CLIENT_CONFIG` dict in `app/calendar_sync.py` with your values.
+3. Add redirect URI: `http://localhost`
+4. Copy your Client ID and Secret
+5. Copy `.env.template` to `.env` and paste your values
 
+> If no `.env` file is found, the app falls back to compiled-in credentials.
+
+### Build executable locally
+
+```bash
+pip install pyinstaller
+pyinstaller --noconsole --onefile --name "MyConcertDiary" main.py
+# Output: dist/MyConcertDiary.exe
+```
+
+### Running tests
+
+```bash
+pip install -r requirements.txt
+python -m pytest tests/ -v
+```
