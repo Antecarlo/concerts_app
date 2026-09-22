@@ -10,7 +10,7 @@ from app.database import (
     get_concerts, get_concerts_without_calendar_event, update_concert_color
 )
 from app.pdf_parser import parse_pdf, _add_hours
-from app.calendar_sync import create_calendar_event
+from app.calendar_sync import create_calendar_event, upsert_calendar_event
 from datetime import datetime
 
 
@@ -288,13 +288,13 @@ class ConcertDiaryApp(ctk.CTk):
             action_f = ctk.CTkFrame(self.saved_scroll, fg_color="transparent")
             action_f.grid(row=r, column=6, padx=5, pady=3)
 
-            if not cal_id:
-                ctk.CTkButton(
-                    action_f, text="Sync", width=55, height=28,
-                    command=lambda _id=cid, d=date, l=loc, n=notes,
-                                   st=start_time, et=end_time, clr=color:
-                        self._sync_single(_id, d, l, n, st, et, clr)
-                ).pack(side="left", padx=2)
+            btn_text = "Re-sync" if cal_id else "Sync"
+            ctk.CTkButton(
+                action_f, text=btn_text, width=65, height=28,
+                command=lambda _id=cid, d=date, l=loc, n=notes,
+                               st=start_time, et=end_time, clr=color, ev=cal_id or "":
+                    self._sync_single(_id, d, l, n, st, et, clr, ev)
+            ).pack(side="left", padx=2)
 
             ctk.CTkButton(
                 action_f, text="Edit", width=45, height=28,
@@ -401,8 +401,10 @@ class ConcertDiaryApp(ctk.CTk):
         self._populate_saved_table()
 
     def _sync_single(self, cid: int, date: str, loc: str, notes: str,
-                     start_time: str = "", end_time: str = "", color: str = ""):
-        dialog = SyncDialog(self, [(cid, date, loc, notes, "", start_time, end_time, color)], single=True)
+                     start_time: str = "", end_time: str = "", color: str = "",
+                     event_id: str = ""):
+        concert_tuple = (cid, date, loc, notes, event_id, "", start_time, end_time, color)
+        dialog = SyncDialog(self, [concert_tuple], single=True)
         self.wait_window(dialog)
         if dialog.confirmed:
             selected = dialog.get_selected()
@@ -410,12 +412,12 @@ class ConcertDiaryApp(ctk.CTk):
                 self._run_sync(selected, dialog.selected_color)
 
     def _sync_to_calendar(self):
-        unsynced = get_concerts_without_calendar_event()
-        if not unsynced:
-            messagebox.showinfo("Sync", "All concerts are already synced.")
+        all_concerts = get_concerts()
+        if not all_concerts:
+            messagebox.showinfo("Sync", "No concerts to sync.")
             return
 
-        dialog = SyncDialog(self, unsynced, single=False)
+        dialog = SyncDialog(self, all_concerts, single=False)
         self.wait_window(dialog)
         if dialog.confirmed:
             selected = dialog.get_selected()
@@ -436,27 +438,37 @@ class ConcertDiaryApp(ctk.CTk):
 
         def worker():
             results = []
+            created = 0
+            updated = 0
             for c in concerts:
                 cid = c[0]
                 date = c[1]
                 loc = c[2]
                 notes = c[3]
-                start_time = c[5] if len(c) > 5 else ""
-                end_time = c[6] if len(c) > 6 else ""
-                color = sync_color
+                event_id = c[4] if len(c) > 4 else ""
+                start_time = c[6] if len(c) > 6 else ""
+                end_time = c[7] if len(c) > 7 else ""
+                user_color = c[8] if len(c) > 8 else ""
+                color = sync_color if sync_color else user_color
                 try:
-                    event_id = create_calendar_event(date, loc, notes, start_time, end_time, color)
-                    set_calendar_event_id(cid, event_id)
+                    new_event_id = upsert_calendar_event(
+                        event_id, date, loc, notes, start_time, end_time, color
+                    )
+                    set_calendar_event_id(cid, new_event_id)
                     if color:
                         update_concert_color(cid, color)
+                    if event_id:
+                        updated += 1
+                    else:
+                        created += 1
                     results.append((cid, True, ""))
                 except Exception as e:
                     results.append((cid, False, str(e)))
-            self.after(0, lambda: self._on_sync_done(results))
+            self.after(0, lambda: self._on_sync_done(results, created, updated))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_sync_done(self, results: List[tuple]):
+    def _on_sync_done(self, results: List[tuple], created: int = 0, updated: int = 0):
         ok = sum(1 for r in results if r[1])
         failed = [(cid, err) for cid, ok_, err in results if not ok_]
 
@@ -465,11 +477,24 @@ class ConcertDiaryApp(ctk.CTk):
 
         if failed:
             msg = "\n".join(f"ID {cid}: {err}" for cid, err in failed)
-            messagebox.showerror("Sync errors", f"Synced {ok}.\nErrors:\n{msg}")
+            summary = []
+            if created:
+                summary.append(f"{created} created")
+            if updated:
+                summary.append(f"{updated} updated")
+            summary_str = f" ({', '.join(summary)})" if summary else ""
+            messagebox.showerror("Sync errors", f"Done{summary_str}. Errors:\n{msg}")
             self.status.configure(text=f"Sync done with {len(failed)} error(s).")
         else:
-            messagebox.showinfo("Sync complete",
-                                f"Successfully synced {ok} concert(s) to Calendar!")
+            parts = []
+            if created:
+                parts.append(f"{created} created")
+            if updated:
+                parts.append(f"{updated} updated")
+            msg = f"Successfully synced {ok} concert(s) to Calendar!"
+            if parts:
+                msg += f"\n({' + '.join(parts)})"
+            messagebox.showinfo("Sync complete", msg)
             self.status.configure(text=f"Synced {ok} concert(s).")
 
 
@@ -519,9 +544,12 @@ class SyncDialog(ctk.CTkToplevel):
             dt = c[1]
             loc = c[2]
             notes = c[3] if len(c) > 3 else ""
-            st = c[5] if len(c) > 5 else ""
-            label = f"{dt}  |  {st + ' | ' if st else ''}{loc[:35]}  |  {notes[:35] if notes else '-'}"
-            var = tk.BooleanVar(value=True)
+            event_id = c[4] if len(c) > 4 else ""
+            st = c[6] if len(c) > 6 else ""
+            synced_badge = "✓ Synced → " if event_id else ""
+            label = f"{synced_badge}{dt}  |  {st + ' | ' if st else ''}{loc[:35]}  |  {notes[:35] if notes else '-'}"
+            default_check = True if single else not bool(event_id)
+            var = tk.BooleanVar(value=default_check)
             cb = ctk.CTkCheckBox(scroll, text=label, variable=var,
                                  font=ctk.CTkFont(size=12))
             cb.pack(anchor="w", pady=4, padx=10)
