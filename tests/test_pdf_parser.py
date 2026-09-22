@@ -6,7 +6,6 @@ import pytest
 import os
 import sys
 
-# Ensure the project root is on sys.path so we can import app
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.pdf_parser import (
@@ -23,28 +22,59 @@ from app.pdf_parser import (
 # ── Fixtures ─────────────────────────────────────────────────────────
 
 @pytest.fixture
-def sample_pdf_path():
-    """Path to the real PDF on the developer's machine (used for integration)."""
-    path = r"C:\Users\carli\Desktop\09.Horario Septiembre 2026.pdf"
-    if os.path.exists(path):
-        return path
-    pytest.skip("Sample PDF not found at " + path)
-
-
-@pytest.fixture
-def temp_pdf(tmp_path):
-    """Create a temporary PDF file for testing parse_pdf."""
+def temp_pdf_realistic(tmp_path):
+    """
+    Creates a PDF closely matching the 'Horario Septiembre' real format,
+    with 9 concert rows.
+    """
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfgen import canvas
 
-    filepath = tmp_path / "test_schedule.pdf"
+    filepath = tmp_path / "Horario_Septiembre_2026.pdf"
+    c = canvas.Canvas(str(filepath), pagesize=A4)
+
+    lines = [
+        ("CULTURA", 780),
+        ("BANDA DE MÚSICA", 760),
+        ("AVANCE DEL MES DE SEPTIEMBRE DE 2026", 740),
+        ("ACTUACIONES", 720),
+        ("DÍA ACTUACION-LUGAR HORA", 700),
+        ("Viernes 4 Concierto Programado, (Lugar por confirmar) 20:30 H", 680),
+        ("Viernes 11 Concierto Programado, Plaza de las Pasiegas 20:30 H", 660),
+        ("Domingo 14 Voto de la Ciudad al Cristo de San Agustín (San Antón) 20:00 H", 640),
+        ("Lunes 15 Ofrenda Floral Virgen de las Angustias 17:30 H", 620),
+        ("Viernes 18 Concierto Programado, Plaza de las Pasiegas 20:00 H", 600),
+        ("Domingo 20 Concierto Joaquina Egüara 12:00 H", 580),
+        ("Viernes 25 Concierto Programado, (Lugar por confirmar) 20:00 H", 560),
+        ("Sábado 26 Misa Virgen de las Angustias 11:45 H", 540),
+        ("Domingo 27 Procesión Virgen de las Angustias 17:30 H", 520),
+        ("ENSAYOS: 1, 2, 3, 8, 9, 10, 16, 17, 22, 23, 24, 29 y 30.", 500),
+        ("DESCANSOS: 5, 6, 7, 12, 13, 19, 21 y 28.", 480),
+        ("OBSERVACIONES:", 460),
+        ("Los ensayos de carácter individual y de conjunto del mes anterior...", 440),
+        ("Granada a 15 de Agosto de 2026", 420),
+        ("Director de la Banda Municipal de Música de Granada", 400),
+    ]
+    for text, y in lines:
+        c.drawString(50, y, text)
+
+    c.save()
+    return str(filepath)
+
+
+@pytest.fixture
+def temp_pdf_simple(tmp_path):
+    """Simple PDF with fewer rows for quick testing."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+
+    filepath = tmp_path / "simple_schedule.pdf"
     c = canvas.Canvas(str(filepath), pagesize=A4)
     c.drawString(50, 800, "AVANCE DEL MES DE SEPTIEMBRE DE 2026")
     c.drawString(50, 770, "ACTUACIONES")
     c.drawString(50, 750, "Viernes 4 Concierto Programado, Plaza Mayor 20:30 H")
     c.drawString(50, 730, "Domingo 20 Concierto Especial, Teatro Central 12:00 H")
     c.drawString(50, 710, "Martes 9 Ningun evento aqui")
-    c.drawString(50, 690, "ENSAYOS: 1, 2, 3")
     c.save()
     return str(filepath)
 
@@ -138,7 +168,6 @@ class TestExtractVenueAndEvent:
     def test_lugar_por_confirmar(self):
         event, venue = _extract_venue_and_event("Concierto Programado, (Lugar por confirmar)")
         assert "Concierto Programado" in event
-        # "(Lugar por confirmar)" contains "lugar" keyword, so it should be extracted as venue
         assert venue != ""
 
     def test_empty_string(self):
@@ -188,13 +217,21 @@ class TestRowPattern:
         m = ROW_PATTERN.search("OBSERVACIONES:")
         assert m is None
 
+    def test_parenthetical_location(self):
+        """Location can be in parentheses like '(Lugar por confirmar)'."""
+        m = ROW_PATTERN.search("Viernes 4 Concierto, (Lugar por confirmar) 20:30 H")
+        assert m is not None
+        assert m.group("description").strip() == "Concierto, (Lugar por confirmar)"
+        assert m.group("time") == "20:30"
 
-# ── Integration tests: parse_pdf with real PDF ─────────────────────
 
-class TestParsePdfIntegration:
-    def test_real_pdf_returns_concerts(self, sample_pdf_path):
-        """Integration test with the actual concert schedule PDF."""
-        results = parse_pdf(sample_pdf_path)
+# ── Integration tests: parse_pdf with realistic temp PDF ────────────
+
+class TestParsePdfRealistic:
+    """Tests that parse the full 9-concert realistic PDF fixture."""
+
+    def test_returns_concerts(self, temp_pdf_realistic):
+        results = parse_pdf(temp_pdf_realistic)
         assert len(results) > 0
         for concert in results:
             assert "date" in concert
@@ -202,87 +239,86 @@ class TestParsePdfIntegration:
             assert "notes" in concert
             assert "source_file" in concert
 
-    def test_real_pdf_all_have_dates(self, sample_pdf_path):
-        results = parse_pdf(sample_pdf_path)
+    def test_all_have_dates(self, temp_pdf_realistic):
+        results = parse_pdf(temp_pdf_realistic)
         for concert in results:
-            assert concert["date"] != "", f"Missing date for {concert}"
-            # Should be YYYY-MM-DD format
+            assert concert["date"] != ""
             parts = concert["date"].split("-")
             assert len(parts) == 3, f"Invalid date format: {concert['date']}"
 
-    def test_real_pdf_september_dates(self, sample_pdf_path):
-        results = parse_pdf(sample_pdf_path)
+    def test_september_dates(self, temp_pdf_realistic):
+        results = parse_pdf(temp_pdf_realistic)
         for concert in results:
             assert concert["date"].startswith("2026-09-"), \
                 f"Expected September 2026, got {concert['date']}"
 
-    def test_real_pdf_all_have_locations(self, sample_pdf_path):
-        results = parse_pdf(sample_pdf_path)
+    def test_all_have_locations(self, temp_pdf_realistic):
+        results = parse_pdf(temp_pdf_realistic)
         for concert in results:
-            assert concert["location"] != "", f"Missing location for {concert}"
+            assert concert["location"] != ""
 
-    def test_real_pdf_all_have_notes(self, sample_pdf_path):
-        results = parse_pdf(sample_pdf_path)
+    def test_all_have_notes(self, temp_pdf_realistic):
+        results = parse_pdf(temp_pdf_realistic)
         for concert in results:
-            assert concert["notes"] != "", f"Missing notes for {concert}"
+            assert concert["notes"] != ""
 
-    def test_real_pdf_source_file(self, sample_pdf_path):
-        results = parse_pdf(sample_pdf_path)
+    def test_source_file(self, temp_pdf_realistic):
+        results = parse_pdf(temp_pdf_realistic)
         for concert in results:
-            assert concert["source_file"] == sample_pdf_path
+            assert concert["source_file"] == temp_pdf_realistic
 
-    def test_real_pdf_expected_count(self, sample_pdf_path):
-        """We expect 9 concerts from this specific PDF."""
-        results = parse_pdf(sample_pdf_path)
+    def test_expected_count(self, temp_pdf_realistic):
+        """We expect 9 concerts, matching the real PDF format."""
+        results = parse_pdf(temp_pdf_realistic)
         assert len(results) == 9, f"Expected 9 concerts, got {len(results)}"
 
-    def test_real_pdf_specific_concert(self, sample_pdf_path):
-        """Verify a specific known entry."""
-        results = parse_pdf(sample_pdf_path)
-        # Find the "Plaza de las Pasiegas" concert on 2026-09-11
+    def test_specific_concert_plaza_pasiegas(self, temp_pdf_realistic):
+        """Verify the 'Plaza de las Pasiegas' concert on 2026-09-11."""
+        results = parse_pdf(temp_pdf_realistic)
         found = [c for c in results if "Pasiegas" in c["location"]]
         assert len(found) >= 1
         concert = found[0]
         assert concert["date"] == "2026-09-11"
 
-    def test_real_pdf_time_in_notes(self, sample_pdf_path):
+    def test_specific_concert_lugar_confirmar(self, temp_pdf_realistic):
+        """Concerts with '(Lugar por confirmar)' should be extracted."""
+        results = parse_pdf(temp_pdf_realistic)
+        found = [c for c in results if "confirmar" in c["location"]]
+        assert len(found) >= 1
+
+    def test_time_in_notes(self, temp_pdf_realistic):
         """Check that time info is present in notes."""
-        results = parse_pdf(sample_pdf_path)
+        results = parse_pdf(temp_pdf_realistic)
         for concert in results:
-            assert ":" in concert["notes"], \
-                f"Expected time in notes: {concert['notes']}"
+            assert ":" in concert["notes"]
 
 
-# ── Integration tests: parse_pdf with temp PDF ─────────────────────
+# ── Integration tests: parse_pdf with simple temp PDF ──────────────
 
-class TestParsePdfTempPdf:
-    def test_temp_pdf_returns_expected(self, temp_pdf):
-        results = parse_pdf(temp_pdf)
-        # We expect at least 2 rows: Viernes 4 and Domingo 20
-        # (Martes 9 line has no time → not matched by ROW_PATTERN)
+class TestParsePdfSimple:
+    def test_returns_expected(self, temp_pdf_simple):
+        results = parse_pdf(temp_pdf_simple)
         assert len(results) >= 2
 
-    def test_temp_pdf_first_concert(self, temp_pdf):
-        results = parse_pdf(temp_pdf)
-        # First row: "Viernes 4 Concierto Programado, Plaza Mayor 20:30 H"
+    def test_first_concert(self, temp_pdf_simple):
+        results = parse_pdf(temp_pdf_simple)
         first = results[0]
         assert first["date"] == "2026-09-04"
         assert "Plaza Mayor" in first["location"]
 
-    def test_temp_pdf_event_name(self, temp_pdf):
-        results = parse_pdf(temp_pdf)
-        # "Domingo 20 Concierto Especial, Teatro Central 12:00 H"
+    def test_event_name(self, temp_pdf_simple):
+        results = parse_pdf(temp_pdf_simple)
         concert = [c for c in results if "Teatro Central" in c["location"]]
         assert len(concert) >= 1
         assert "Concierto Especial" in concert[0]["notes"]
 
-    def test_temp_pdf_source_file(self, temp_pdf):
-        results = parse_pdf(temp_pdf)
+    def test_source_file(self, temp_pdf_simple):
+        results = parse_pdf(temp_pdf_simple)
         for r in results:
-            assert r["source_file"] == temp_pdf
+            assert r["source_file"] == temp_pdf_simple
 
-    def test_temp_pdf_no_empty_dates(self, temp_pdf):
-        results = parse_pdf(temp_pdf)
+    def test_no_empty_dates(self, temp_pdf_simple):
+        results = parse_pdf(temp_pdf_simple)
         for r in results:
             assert r["date"] != ""
 
@@ -317,5 +353,4 @@ class TestParsePdfEdgeCases:
         c.drawString(50, 770, "No hay conciertos aqui")
         c.save()
         results = parse_pdf(str(filepath))
-        # No rows matched, should yield fallback
         assert len(results) == 1
