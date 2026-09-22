@@ -60,11 +60,18 @@ def _load_client_config() -> dict:
         import os
         client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
 
-    # 3. Last resort: compiled-in defaults
+    # 3. If no credentials found at all, raise a clear error
+    #    (GitHub builds inject .env via secrets, local devs copy .env.template)
     if not client_id:
-        client_id = "648692389008-p7f9fef7s0g03g9bbpp4dgo602hu5lis.apps.googleusercontent.com"
+        raise RuntimeError(
+            "Missing GOOGLE_CLIENT_ID. "
+            "Copy .env.template to .env and set your Google OAuth credentials."
+        )
     if not client_secret:
-        client_secret = "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"
+        raise RuntimeError(
+            "Missing GOOGLE_CLIENT_SECRET. "
+            "Copy .env.template to .env and set your Google OAuth credentials."
+        )
 
     return {
         "installed": {
