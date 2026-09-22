@@ -49,8 +49,8 @@ class ConcertDiaryApp(ctk.CTk):
         super().__init__()
 
         self.title("My Concert Diary")
-        self.geometry("1000x800")
-        self.minsize(900, 650)
+        self.geometry("1000x850")
+        self.minsize(900, 750)
 
         ctk.set_appearance_mode("System")
         ctk.set_default_color_theme("blue")
@@ -135,8 +135,8 @@ class ConcertDiaryApp(ctk.CTk):
         )
         self.review_count.pack(side="left", padx=10)
 
-        self.review_scroll = ctk.CTkScrollableFrame(review_frame, height=200)
-        self.review_scroll.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+        self.review_scroll = ctk.CTkScrollableFrame(review_frame, height=160)
+        self.review_scroll.pack(fill="both", expand=False, padx=15, pady=(0, 15))
         self._build_review_header()
 
         # ── Saved frame ──
@@ -157,8 +157,8 @@ class ConcertDiaryApp(ctk.CTk):
         )
         self.saved_count.pack(side="left", padx=10)
 
-        self.saved_scroll = ctk.CTkScrollableFrame(saved_frame, height=220)
-        self.saved_scroll.pack(fill="both", expand=True, padx=15, pady=(0, 5))
+        self.saved_scroll = ctk.CTkScrollableFrame(saved_frame, height=180)
+        self.saved_scroll.pack(fill="x", expand=False, padx=15, pady=(0, 5))
         self._build_saved_header()
 
         # Sync button BELOW the saved table
