@@ -33,3 +33,4 @@ The app ships with embedded OAuth credentials. If you want to use your own:
 1. Go to [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services** → **Credentials**
 2. Create **OAuth client ID** → **Desktop app**
 3. Replace the `_CLIENT_CONFIG` dict in `app/calendar_sync.py` with your values.
+
